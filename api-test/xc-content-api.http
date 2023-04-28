@@ -31,7 +31,18 @@ Content-Type: application/json
   "users": "初级人员",
   "tags": "tagstagstags",
   "grade": "204001",
-  "description": "java网络编程高级java网络编程高级java网络编程高级"
+  "description": "java"
 }
+
+###
+GET {{content_host}}/content/course/40
+Content-Type: application/json
+
+###
+PUT {{content_host}}/content/course/40
+Content-Type: application/json
+###
+GET {{content_host}}/content/teachplan/117/tree-nodes
+Content-Type: application/json
 
 ###
