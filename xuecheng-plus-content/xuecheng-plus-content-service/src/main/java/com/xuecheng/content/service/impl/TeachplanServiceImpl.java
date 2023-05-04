@@ -10,6 +10,7 @@ import com.xuecheng.content.service.TeachplanService;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -60,5 +61,28 @@ public class TeachplanServiceImpl implements TeachplanService {
         } else {
             teachplanMapper.deleteById(teachplanId);
         }
+    }
+
+    @Override
+    public void moveTeachplan(Long teachplanId, String moveType) {
+        Teachplan tar = teachplanMapper.selectById(teachplanId);
+        LambdaQueryWrapper<Teachplan> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper
+                .eq(Teachplan::getParentid,tar.getParentid())
+                .eq(Teachplan::getCourseId, tar.getCourseId())
+                .gt(moveType.equals("movedown"), Teachplan::getOrderby, tar.getOrderby())
+                .lt(moveType.equals("moveup"),Teachplan::getOrderby,tar.getOrderby())
+                .orderByDesc(moveType.equals("moveup"), Teachplan::getOrderby)
+                .last("limit 1");
+        Teachplan teachplan = teachplanMapper.selectOne(queryWrapper);//查询出被移动的teachplan
+        if (teachplan==null){
+            XueChengPlusException.cast("已经到边界了，不能再移动啦");
+        }
+        int o1=tar.getOrderby();//需要移动的teachplan
+        int o2 = teachplan.getOrderby();//被移动的teachplan
+        teachplan.setOrderby(o1);
+        tar.setOrderby(o2);
+        teachplanMapper.updateById(tar);
+        teachplanMapper.updateById(teachplan);
     }
 }

@@ -9,6 +9,7 @@ import io.swagger.annotations.ApiOperation;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import javax.websocket.server.PathParam;
 import java.util.List;
 
 /**
@@ -18,7 +19,7 @@ import java.util.List;
  * @date ${LocalDateTime.now()}
  */
 @Api(value = "课程计划编辑相关接口",tags = "课程计划编辑相关接口")
-@RestController("")
+@RestController
 public class TeachplanController {
     @Autowired
     private TeachplanService teachplanService;
@@ -39,4 +40,11 @@ public class TeachplanController {
     public void deleteTeachplan(@PathVariable Long teachplanId){
         teachplanService.deleteTeachplan(teachplanId);
     }
+
+    @ApiOperation("课程下移接口")
+    @PostMapping("/teachplan/{moveType}/{id}")
+    public void moveTeachplan(@PathVariable String moveType, @PathVariable Long id){
+        teachplanService.moveTeachplan(id,moveType);
+    }
+
 }
