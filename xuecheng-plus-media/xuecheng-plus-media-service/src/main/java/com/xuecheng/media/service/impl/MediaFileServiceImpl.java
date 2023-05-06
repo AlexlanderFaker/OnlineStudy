@@ -9,10 +9,12 @@ import com.xuecheng.base.model.PageParams;
 import com.xuecheng.base.model.PageResult;
 import com.xuecheng.base.model.RestResponse;
 import com.xuecheng.media.mapper.MediaFilesMapper;
+import com.xuecheng.media.mapper.MediaProcessMapper;
 import com.xuecheng.media.model.dto.QueryMediaParamsDto;
 import com.xuecheng.media.model.dto.UploadFileParamsDto;
 import com.xuecheng.media.model.dto.UploadFileResultDto;
 import com.xuecheng.media.model.po.MediaFiles;
+import com.xuecheng.media.model.po.MediaProcess;
 import com.xuecheng.media.service.MediaFileService;
 import io.minio.*;
 import io.minio.messages.DeleteError;
@@ -56,6 +58,9 @@ public class MediaFileServiceImpl implements MediaFileService {
 
     @Autowired
     MediaFileService currentProxy;
+
+    @Autowired
+    MediaProcessMapper mediaProcessMapper;
 
     //存储普通文件
     @Value("${minio.bucket.files}")
@@ -219,12 +224,34 @@ public class MediaFileServiceImpl implements MediaFileService {
                 log.debug("向数据库保存文件失败,bucket:{},objectName:{}", bucket, objectName);
                 return null;
             }
-            return mediaFiles;
 
+            addWaitingTask(mediaFiles);
+            //记录待处理任务
+            return mediaFiles;
         }
         return mediaFiles;
-
     }
+
+    /**
+     * 添加待处理任务
+     *
+     * @param mediaFiles 媒资文件信息
+     */
+    private void addWaitingTask(MediaFiles mediaFiles) {
+        //获取文件的mimeType
+        String filename = mediaFiles.getFilename();
+        String extension = filename.substring(filename.lastIndexOf("."));
+        String mimeType = getMimeType(extension);
+        if (mimeType.equals("video/x-msvideo")){
+            MediaProcess mediaProcess = new MediaProcess();
+            BeanUtils.copyProperties(mediaFiles,mediaProcess);
+            mediaProcess.setStatus("1");
+            mediaProcess.setCreateDate(LocalDateTime.now());
+            mediaProcess.setFailCount(0);
+            mediaProcessMapper.insert(mediaProcess);
+        }
+    }
+
 
     @Override
     public RestResponse<Boolean> checkFile(String fileMd5) {
@@ -287,8 +314,8 @@ public class MediaFileServiceImpl implements MediaFileService {
         String mimeType = getMimeType(null);
         //将分块文件上传到minio
         boolean b = addMediaFilesToMinIO(localChunkFilePath, mimeType, bucket_video, chunkFilePath);
-        if(!b){
-            return RestResponse.validfail(false,"上传分块文件失败");
+        if (!b) {
+            return RestResponse.validfail(false, "上传分块文件失败");
         }
         //上传成功
         return RestResponse.success(true);
@@ -322,34 +349,34 @@ public class MediaFileServiceImpl implements MediaFileService {
             minioClient.composeObject(composeObjectArgs);
         } catch (Exception e) {
             e.printStackTrace();
-            log.error("合并文件出错,bucket:{},objectName:{},错误信息:{}",bucket_video,objectName,e.getMessage());
-            return RestResponse.validfail(false,"合并文件异常");
+            log.error("合并文件出错,bucket:{},objectName:{},错误信息:{}", bucket_video, objectName, e.getMessage());
+            return RestResponse.validfail(false, "合并文件异常");
         }
 
         //===========校验合并后的和源文件是否一致，视频上传才成功===========
         //先下载合并后的文件
         File file = downloadFileFromMinIO(bucket_video, objectName);
-        try(FileInputStream fileInputStream = new FileInputStream(file)){
+        try (FileInputStream fileInputStream = new FileInputStream(file)) {
             //计算合并后文件的md5
             String mergeFile_md5 = DigestUtils.md5Hex(fileInputStream);
             //比较原始md5和合并后文件的md5
-            if(!fileMd5.equals(mergeFile_md5)){
-                log.error("校验合并文件md5值不一致,原始文件:{},合并文件:{}",fileMd5,mergeFile_md5);
-                return RestResponse.validfail(false,"文件校验失败");
+            if (!fileMd5.equals(mergeFile_md5)) {
+                log.error("校验合并文件md5值不一致,原始文件:{},合并文件:{}", fileMd5, mergeFile_md5);
+                return RestResponse.validfail(false, "文件校验失败");
             }
             //文件大小
             uploadFileParamsDto.setFileSize(file.length());
-        }catch (Exception e) {
-            return RestResponse.validfail(false,"文件校验失败");
+        } catch (Exception e) {
+            return RestResponse.validfail(false, "文件校验失败");
         }
 
         //==============将文件信息入库============
         MediaFiles mediaFiles = currentProxy.addMediaFilesToDb(companyId, fileMd5, uploadFileParamsDto, bucket_video, objectName);
-        if(mediaFiles == null){
-            return RestResponse.validfail(false,"文件入库失败");
+        if (mediaFiles == null) {
+            return RestResponse.validfail(false, "文件入库失败");
         }
         //==========清理分块文件=========
-        clearChunkFiles(chunkFileFolderPath,chunkTotal);
+        clearChunkFiles(chunkFileFolderPath, chunkTotal);
 
         return RestResponse.success(true);
     }
